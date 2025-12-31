@@ -236,7 +236,15 @@ export async function addKeys(keys) {
 
 /**
  * 更新API Key信息
- * @description 更新指定API Key的信息。支持更新所有字段（除了_id和create_date）。
+ * @description 更新指定API Key的信息。支持通过记录ID或Key值定位记录。
+ *
+ * **定位方式（二选一）**：
+ * - _id: 通过记录ID定位
+ * - key: 通过API Key值定位
+ *
+ * **更新方式**：
+ * - updateData: 直接覆盖更新
+ * - incData: 增量更新（仅支持数值字段：quota、remain_quota、used_quota）
  *
  * **支持更新的字段**：
  * - key: API密钥
@@ -256,97 +264,168 @@ export async function addKeys(keys) {
  * **注意事项**：
  * - _id 和 create_date 字段不允许更新
  * - 只需传入需要更新的字段，无需传入所有字段
+ * - _id 和 key 参数至少提供一个
+ * - updateData 和 incData 至少提供一个
+ * - incData 中的值为正数表示增加，负数表示减少
  *
- * @param {string} _id - Key记录ID（必需）
- * @param {Object} updateData - 要更新的数据对象（必需）
- * @param {string} [updateData.key] - AI接口的API密钥
- * @param {string} [updateData.key_type] - API Key的类型：coderouter | anyrouter | other
- * @param {number} [updateData.quota] - API Key的初始额度（单位：美元）
- * @param {number} [updateData.remain_quota] - API Key的剩余可用额度（单位：美元）
- * @param {number} [updateData.used_quota] - API Key的已使用额度（单位：美元）
- * @param {number} [updateData.query_date] - 最后一次查询额度的时间戳（毫秒）
- * @param {number} [updateData.quota_update_date] - 额度信息最后更新的时间戳（毫秒）
- * @param {string} [updateData.account_id] - 关联的AnyRouter账号ID
- * @param {string} [updateData.source_name] - Key的来源或提供者名称
- * @param {boolean} [updateData.is_sold] - 该Key是否已出售
- * @param {number} [updateData.sell_date] - Key出售时间戳（毫秒）
- * @param {boolean} [updateData.is_deleted] - 标记Key是否已删除（软删除）
- * @param {number} [updateData.delete_date] - Key删除时间戳（毫秒）
+ * @param {Object} options - 更新选项
+ * @param {string} [options._id] - Key记录ID（与key二选一）
+ * @param {string} [options.key] - API Key值（与_id二选一）
+ * @param {Object} [options.updateData] - 要直接覆盖更新的数据对象
+ * @param {string} [options.updateData.key] - AI接口的API密钥
+ * @param {string} [options.updateData.key_type] - API Key的类型：coderouter | anyrouter | other
+ * @param {number} [options.updateData.quota] - API Key的初始额度（单位：美元）
+ * @param {number} [options.updateData.remain_quota] - API Key的剩余可用额度（单位：美元）
+ * @param {number} [options.updateData.used_quota] - API Key的已使用额度（单位：美元）
+ * @param {number} [options.updateData.query_date] - 最后一次查询额度的时间戳（毫秒）
+ * @param {number} [options.updateData.quota_update_date] - 额度信息最后更新的时间戳（毫秒）
+ * @param {string} [options.updateData.account_id] - 关联的AnyRouter账号ID
+ * @param {string} [options.updateData.source_name] - Key的来源或提供者名称
+ * @param {boolean} [options.updateData.is_sold] - 该Key是否已出售
+ * @param {number} [options.updateData.sell_date] - Key出售时间戳（毫秒）
+ * @param {boolean} [options.updateData.is_deleted] - 标记Key是否已删除（软删除）
+ * @param {number} [options.updateData.delete_date] - Key删除时间戳（毫秒）
+ * @param {Object} [options.incData] - 增量更新的数据对象（正数增加，负数减少）
+ * @param {number} [options.incData.quota] - 初始额度增量值（单位：美元）
+ * @param {number} [options.incData.remain_quota] - 剩余额度增量值（单位：美元）
+ * @param {number} [options.incData.used_quota] - 已使用额度增量值（单位：美元）
  * @returns {Promise<{success: boolean, data?: Object, error?: string}>}
  * @example
- * // 更新 Key 的额度信息
- * const result = await updateKeyInfo('507f1f77bcf86cd799439011', {
- *   remain_quota: 85.5,
- *   used_quota: 14.5,
- *   quota_update_date: Date.now()
+ * // 通过 _id 更新 Key 的额度信息
+ * const result = await updateKeyInfo({
+ *   _id: '507f1f77bcf86cd799439011',
+ *   updateData: {
+ *     remain_quota: 85.5,
+ *     used_quota: 14.5,
+ *     quota_update_date: Date.now()
+ *   }
  * });
  * if (result.success) {
  *   console.log('Key更新成功:', result.data);
  * }
  *
  * @example
- * // 标记 Key 为已出售
- * const result = await updateKeyInfo('507f1f77bcf86cd799439011', {
- *   is_sold: true,
- *   sell_date: Date.now()
+ * // 通过 key 值定位并标记为已出售
+ * const result = await updateKeyInfo({
+ *   key: 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+ *   updateData: {
+ *     is_sold: true,
+ *     sell_date: Date.now()
+ *   }
+ * });
+ *
+ * @example
+ * // 使用增量更新减少剩余额度
+ * const result = await updateKeyInfo({
+ *   _id: '507f1f77bcf86cd799439011',
+ *   incData: {
+ *     remain_quota: -5.5,
+ *     used_quota: 5.5
+ *   }
  * });
  */
-export async function updateKeyInfo(_id, updateData) {
-	// 验证必需字段
-	if (!_id) {
+export async function updateKeyInfo(options) {
+	// 验证参数类型
+	if (!options || typeof options !== 'object') {
 		return {
 			success: false,
-			error: 'Key记录ID不能为空',
+			error: '参数必须为对象',
 		};
 	}
 
-	if (!updateData || typeof updateData !== 'object') {
+	const { _id, key, updateData, incData } = options;
+
+	// 验证定位参数：_id 和 key 至少提供一个
+	if (!_id && !key) {
 		return {
 			success: false,
-			error: '更新数据不能为空且必须为对象',
+			error: '_id 和 key 至少需要提供一个',
 		};
 	}
 
-	// 检查是否有要更新的字段
-	const updateKeys = Object.keys(updateData);
-	if (updateKeys.length === 0) {
+	// 验证更新参数：updateData 和 incData 至少提供一个
+	if (!updateData && !incData) {
 		return {
 			success: false,
-			error: '至少需要提供一个要更新的字段',
+			error: 'updateData 和 incData 至少需要提供一个',
 		};
 	}
 
-	// 不允许更新的字段
-	const forbiddenFields = ['_id', 'create_date'];
-	for (const field of forbiddenFields) {
-		if (field in updateData) {
+	// 验证 updateData（如果提供）
+	if (updateData !== undefined) {
+		if (typeof updateData !== 'object' || updateData === null) {
 			return {
 				success: false,
-				error: `不允许更新 ${field} 字段`,
+				error: 'updateData 必须为对象',
 			};
+		}
+
+		// 不允许更新的字段
+		const forbiddenFields = ['_id', 'create_date'];
+		for (const field of forbiddenFields) {
+			if (field in updateData) {
+				return {
+					success: false,
+					error: `不允许更新 ${field} 字段`,
+				};
+			}
+		}
+
+		// 验证 key_type 枚举值（如果提供）
+		if (updateData.key_type !== undefined && !['coderouter', 'anyrouter', 'other'].includes(updateData.key_type)) {
+			return {
+				success: false,
+				error: 'Key类型必须为 coderouter、anyrouter 或 other',
+			};
+		}
+
+		// 验证数字字段为非负数
+		const numericFields = ['quota', 'remain_quota', 'used_quota'];
+		for (const field of numericFields) {
+			if (updateData[field] !== undefined && (typeof updateData[field] !== 'number' || updateData[field] < 0)) {
+				return {
+					success: false,
+					error: `${field} 必须为非负数`,
+				};
+			}
 		}
 	}
 
-	// 验证 key_type 枚举值（如果提供）
-	if (updateData.key_type !== undefined && !['coderouter', 'anyrouter', 'other'].includes(updateData.key_type)) {
-		return {
-			success: false,
-			error: 'Key类型必须为 coderouter、anyrouter 或 other',
-		};
-	}
-
-	// 验证数字字段为非负数
-	const numericFields = ['quota', 'remain_quota', 'used_quota'];
-	for (const field of numericFields) {
-		if (updateData[field] !== undefined && (typeof updateData[field] !== 'number' || updateData[field] < 0)) {
+	// 验证 incData（如果提供）
+	if (incData !== undefined) {
+		if (typeof incData !== 'object' || incData === null) {
 			return {
 				success: false,
-				error: `${field} 必须为非负数`,
+				error: 'incData 必须为对象',
 			};
+		}
+
+		// incData 只支持数值字段
+		const allowedIncFields = ['quota', 'remain_quota', 'used_quota'];
+		for (const field of Object.keys(incData)) {
+			if (!allowedIncFields.includes(field)) {
+				return {
+					success: false,
+					error: `incData 不支持 ${field} 字段，仅支持 quota、remain_quota、used_quota`,
+				};
+			}
+			if (typeof incData[field] !== 'number') {
+				return {
+					success: false,
+					error: `incData.${field} 必须为数字`,
+				};
+			}
 		}
 	}
 
-	return handleApiResponse(apiClient.post('/ai-key-admin/updateKeyInfo', { _id, updateData }));
+	// 构建请求数据
+	const requestData = {};
+	if (_id) requestData._id = _id;
+	if (key) requestData.key = key;
+	if (updateData) requestData.updateData = updateData;
+	if (incData) requestData.incData = incData;
+
+	return handleApiResponse(apiClient.post('/ai-key-admin/updateKeyInfo', requestData));
 }
 
 export default {

@@ -20,4 +20,4 @@ export { getRandomApplication, resetApplicationUsage } from './application.js';
 export { getTopPriorityTask, updateInviteCount } from './invite-task.js';
 export { uploadImage } from './upload.js';
 export { addEmail, getLatestEmail, queryEmails } from './email.js';
-export { addKey, addKeys } from './ai-key.js';
+export { addKey, addKeys, updateKeyInfo } from './ai-key.js';

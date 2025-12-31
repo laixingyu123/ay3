@@ -10,7 +10,7 @@ import {
 	getIgnoreDefaultArgs,
 } from '../utils/playwright-stealth.js';
 import { fileURLToPath } from 'url';
-import { addKeys } from '../api/index.js';
+import { addKeys, updateKeyInfo } from '../api/index.js';
 
 class AnyRouterSignIn {
 	constructor() {
@@ -277,7 +277,7 @@ class AnyRouterSignIn {
 	 * @param {Object} accountInfo - 账号信息（可选，用于令牌管理）
 	 * @returns {Object|null} - { session: string, apiUser: string, userInfo: object }
 	 */
-	async loginAndGetSession(username, password, accountInfo = null) {
+	async (username, password, accountInfo = null) {
 		console.log(`[登录签到] 开始处理账号: ${username}`);
 
 		let browser = null;
@@ -647,6 +647,31 @@ class AnyRouterSignIn {
 										console.log(
 											`[令牌管理] 令牌 ${matchedToken.id} 额度补充成功，当前额度: ${updateResult.remain_quota}`
 										);
+
+										// 同步更新服务端 AI Key 信息
+										if (configToken.key) {
+											const keyUpdateResult = await updateKeyInfo({
+												key: configToken.key,
+												incData: {
+													// 增量更新初始额度（转换为美元）
+													quota: configToken.supplement_quota / 500000,
+												},
+												updateData: {
+													// 更新剩余额度和已使用额度（转换为美元）
+													remain_quota: updateResult.remain_quota / 500000,
+													used_quota: (updateResult.used_quota || 0) / 500000,
+													quota_update_date: Date.now(),
+												},
+											});
+
+											if (keyUpdateResult.success) {
+												console.log(`[令牌管理] 服务端 Key 信息同步成功`);
+											} else {
+												console.log(
+													`[令牌管理] 服务端 Key 信息同步失败: ${keyUpdateResult.error}`
+												);
+											}
+										}
 									}
 								} else {
 									console.log(
@@ -687,6 +712,51 @@ class AnyRouterSignIn {
 							console.log(`[令牌管理] 批量上传成功，共 ${keysToUpload.length} 个Key`);
 						} else {
 							console.log(`[令牌管理] 批量上传失败: ${uploadResult.error}`);
+						}
+					}
+				}
+
+				// 检测出售令牌的已使用额度是否有变化，如果有变化则同步更新服务端
+				if (accountInfo && accountInfo.tokens && Array.isArray(accountInfo.tokens)) {
+					// 筛选出售令牌（名称以"出售_"开头且有key的令牌）
+					const sellTokenConfigs = accountInfo.tokens.filter(
+						(t) => t.name && t.name.startsWith('出售_') && t.key
+					);
+
+					for (const configToken of sellTokenConfigs) {
+						// 通过 key 或 id 匹配当前获取到的令牌
+						const currentToken = tokens.find(
+							(t) => t.key === configToken.key || t.id === configToken.id
+						);
+
+						if (currentToken) {
+							const oldUsedQuota = configToken.used_quota || 0;
+							const newUsedQuota = currentToken.used_quota || 0;
+
+							// 检查已使用额度是否有变化
+							if (newUsedQuota !== oldUsedQuota) {
+								console.log(
+									`[令牌管理] 出售令牌 ${configToken.name} 已使用额度变化: ${oldUsedQuota} -> ${newUsedQuota}`
+								);
+
+								const keyUpdateResult = await updateKeyInfo({
+									key: configToken.key,
+									updateData: {
+										// 更新剩余额度和已使用额度（转换为美元）
+										remain_quota: (currentToken.remain_quota || 0) / 500000,
+										used_quota: newUsedQuota / 500000,
+										quota_update_date: Date.now(),
+									},
+								});
+
+								if (keyUpdateResult.success) {
+									console.log(`[令牌管理] 出售令牌 ${configToken.name} 服务端信息同步成功`);
+								} else {
+									console.log(
+										`[令牌管理] 出售令牌 ${configToken.name} 服务端信息同步失败: ${keyUpdateResult.error}`
+									);
+								}
+							}
 						}
 					}
 				}
