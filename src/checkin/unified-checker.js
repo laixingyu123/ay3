@@ -560,28 +560,28 @@ class UnifiedAnyRouterChecker {
 
 		// 根据登录类型选择对应的登录方法
 		switch (accountType) {
-			case 0:
-				// 账号密码登录
-				console.log(`[类型] ${accountName}: 账号密码登录`);
-				return await this.checkInWithPassword(accountInfo);
+		case 0:
+			// 账号密码登录
+			console.log(`[类型] ${accountName}: 账号密码登录`);
+			return await this.checkInWithPassword(accountInfo);
 
-			case 1:
-				// LinuxDo 第三方登录
-				console.log(`[类型] ${accountName}: LinuxDo 第三方登录`);
-				return await this.checkInWithLinuxDo(accountInfo);
+		case 1:
+			// LinuxDo 第三方登录
+			console.log(`[类型] ${accountName}: LinuxDo 第三方登录`);
+			return await this.checkInWithLinuxDo(accountInfo);
 
-			case 2:
-				// GitHub 第三方登录
-				console.log(`[类型] ${accountName}: GitHub 第三方登录`);
-				return await this.checkInWithGitHub(accountInfo);
+		case 2:
+			// GitHub 第三方登录
+			console.log(`[类型] ${accountName}: GitHub 第三方登录`);
+			return await this.checkInWithGitHub(accountInfo);
 
-			default:
-				console.log(`[失败] ${accountName}: 未知的登录类型 ${accountType}`);
-				return {
-					success: false,
-					account: accountName,
-					error: `未知的登录类型: ${accountType}`,
-				};
+		default:
+			console.log(`[失败] ${accountName}: 未知的登录类型 ${accountType}`);
+			return {
+				success: false,
+				account: accountName,
+				error: `未知的登录类型: ${accountType}`,
+			};
 		}
 	}
 
@@ -630,15 +630,27 @@ class UnifiedAnyRouterChecker {
 
 		const results = [];
 
+		// 读取延迟配置
+		const firstDelay = process.env.CHECKIN_FIRST_DELAY === 'true';
+		const maxDelay = Math.max(5, parseInt(process.env.CHECKIN_MAX_DELAY, 10) || 10);
+		const minDelay = 5;
+
 		// 为每个账号执行签到
 		for (let i = 0; i < this.accounts.length; i++) {
 			try {
+				// 首个账号延迟处理
+				if (i === 0 && firstDelay) {
+					const delay = minDelay * 1000 + Math.random() * (maxDelay - minDelay) * 1000;
+					console.log(`[等待] 首个账号延迟 ${(delay / 1000).toFixed(1)} 秒后执行签到...`);
+					await new Promise((resolve) => setTimeout(resolve, delay));
+				}
+
 				const result = await this.checkInAccount(this.accounts[i], i);
 				results.push(result);
 
 				// 账号之间添加延迟，避免频繁操作触发限制
 				if (i < this.accounts.length - 1) {
-					const delay = 5000 + Math.random() * 2000; // 5-7秒随机延迟
+					const delay = minDelay * 1000 + Math.random() * (maxDelay - minDelay) * 1000;
 					console.log(`[等待] 等待 ${(delay / 1000).toFixed(1)} 秒后处理下一个账号...`);
 					await new Promise((resolve) => setTimeout(resolve, delay));
 				}

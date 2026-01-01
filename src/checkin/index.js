@@ -39,9 +39,21 @@ async function main(testAccounts = null) {
 		const results = checkResult.results;
 		const emailGroups = checkResult.emailGroups;
 
+		// 读取邮箱通知配置
+		const emailNotifyEnabled = process.env.CHECKIN_EMAIL_NOTIFY !== 'false';
+		const emailExcludeList = (process.env.CHECKIN_EMAIL_EXCLUDE || '892507222@qq.com')
+			.split(',')
+			.map((e) => e.trim().toLowerCase());
+
 		// 按邮箱分组发送通知
-		if (emailGroups) {
+		if (emailGroups && emailNotifyEnabled) {
 			for (const [email, group] of Object.entries(emailGroups)) {
+				// 检查是否在排除列表中
+				if (emailExcludeList.includes(email.toLowerCase())) {
+					console.log(`\n[跳过] 邮箱 ${email} 在排除列表中，跳过通知`);
+					continue;
+				}
+
 				const notificationContent = [];
 
 				// 添加每个账号的结果
@@ -89,45 +101,50 @@ async function main(testAccounts = null) {
 					console.error(`[失败] 发送通知到 ${email} 失败:`, notifyError.message);
 				}
 			}
-		} else {
-			// 兼容旧版本，发送统一通知
-			const notificationContent = [];
-			for (const result of results) {
-				const status = result.success ? '[成功]' : '[失败]';
-				let accountResult = `${status} ${result.account}`;
-				if (result.userInfo) {
-					accountResult += `\n${result.userInfo}`;
-				}
-				if (result.error) {
-					accountResult += ` - ${result.error.substring(0, 50)}...`;
-				}
-				notificationContent.push(accountResult);
-			}
-
-			// 构建统计信息
-			const summary = [
-				'[统计] 签到结果统计:',
-				`[成功] 成功: ${checkResult.successCount}/${checkResult.totalCount}`,
-				`[失败] 失败: ${checkResult.totalCount - checkResult.successCount}/${checkResult.totalCount}`,
-			];
-
-			if (checkResult.successCount === checkResult.totalCount) {
-				summary.push('[成功] 所有账号签到成功!');
-			} else if (checkResult.successCount > 0) {
-				summary.push('[警告] 部分账号签到成功');
+		} else if (emailNotifyEnabled) {
+			// 兼容旧版本，发送统一通知（需检查默认邮箱是否在排除列表）
+			const defaultEmail = process.env.EMAIL_TO || '';
+			if (emailExcludeList.includes(defaultEmail.toLowerCase())) {
+				console.log(`\n[跳过] 默认邮箱 ${defaultEmail} 在排除列表中，跳过通知`);
 			} else {
-				summary.push('[错误] 所有账号签到失败');
+				const notificationContent = [];
+				for (const result of results) {
+					const status = result.success ? '[成功]' : '[失败]';
+					let accountResult = `${status} ${result.account}`;
+					if (result.userInfo) {
+						accountResult += `\n${result.userInfo}`;
+					}
+					if (result.error) {
+						accountResult += ` - ${result.error.substring(0, 50)}...`;
+					}
+					notificationContent.push(accountResult);
+				}
+
+				// 构建统计信息
+				const summary = [
+					'[统计] 签到结果统计:',
+					`[成功] 成功: ${checkResult.successCount}/${checkResult.totalCount}`,
+					`[失败] 失败: ${checkResult.totalCount - checkResult.successCount}/${checkResult.totalCount}`,
+				];
+
+				if (checkResult.successCount === checkResult.totalCount) {
+					summary.push('[成功] 所有账号签到成功!');
+				} else if (checkResult.successCount > 0) {
+					summary.push('[警告] 部分账号签到成功');
+				} else {
+					summary.push('[错误] 所有账号签到失败');
+				}
+
+				const timeInfo = `[时间] 执行时间: ${new Date().toLocaleString('zh-CN')}`;
+
+				// 组合完整的通知内容
+				const fullNotifyContent = [timeInfo, '', ...notificationContent, '', ...summary].join('\n');
+
+				console.log('\n' + fullNotifyContent);
+
+				// 发送通知
+				await notify.pushMessage('AnyRouter 签到结果', fullNotifyContent, 'text');
 			}
-
-			const timeInfo = `[时间] 执行时间: ${new Date().toLocaleString('zh-CN')}`;
-
-			// 组合完整的通知内容
-			const fullNotifyContent = [timeInfo, '', ...notificationContent, '', ...summary].join('\n');
-
-			console.log('\n' + fullNotifyContent);
-
-			// 发送通知
-			await notify.pushMessage('AnyRouter 签到结果', fullNotifyContent, 'text');
 		}
 
 		// 设置退出码
