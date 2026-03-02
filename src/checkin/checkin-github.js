@@ -450,6 +450,13 @@ class AnyRouterGitHubSignIn {
 				const currentUrl = page.url();
 				console.log(`[页面] 当前 URL: ${currentUrl}`);
 
+				// 检测浏览器错误页面（网络不可达、被拦截等）
+				if (currentUrl.includes('chrome-error://') || currentUrl === 'about:blank') {
+					console.log('[错误] GitHub 页面加载失败，可能是网络问题或被拦截');
+					console.log('[提示] 请检查网络连接或代理设置是否能访问 github.com');
+					return null;
+				}
+
 				if (currentUrl.includes('github.com/login')) {
 					// 需要登录 GitHub
 					console.log('[GitHub] 检测到需要登录，开始填写 GitHub 账号...');

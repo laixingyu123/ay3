@@ -139,6 +139,10 @@ class UnifiedAnyRouterChecker {
 				// 添加令牌信息
 				if (loginResult.userInfo.tokens) {
 					updateData.tokens = loginResult.userInfo.tokens;
+					const unlimitedToken = loginResult.userInfo.tokens.find((t) => t.unlimited_quota);
+					if (unlimitedToken) {
+						updateData.first_unlimited_key = unlimitedToken.key;
+					}
 				}
 
 				const quota = (loginResult.userInfo.quota / 500000).toFixed(2);
@@ -355,6 +359,10 @@ class UnifiedAnyRouterChecker {
 			// 添加令牌信息
 			if (loginResult.userInfo.tokens) {
 				updateData.tokens = loginResult.userInfo.tokens;
+				const unlimitedToken = loginResult.userInfo.tokens.find((t) => t.unlimited_quota);
+				if (unlimitedToken) {
+					updateData.first_unlimited_key = unlimitedToken.key;
+				}
 			}
 
 			updateData.checkin_date = Date.now();
@@ -428,6 +436,10 @@ class UnifiedAnyRouterChecker {
 				// 添加令牌信息
 				if (signInResult.userInfo.tokens) {
 					updateData.tokens = signInResult.userInfo.tokens;
+					const unlimitedToken = signInResult.userInfo.tokens.find((t) => t.unlimited_quota);
+					if (unlimitedToken) {
+						updateData.first_unlimited_key = unlimitedToken.key;
+					}
 					delete signInResult.userInfo.tokens;
 				}
 
